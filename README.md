@@ -29,6 +29,12 @@
 
 ## 安装
 
+Windows 用户可从本仓库 Releases 下载 `dsh-spectate-v0.1.0-win32-x64.zip`，解压后运行 `dsh-spectate.exe`，无需安装 Node.js。首次运行需配置接收端地址与令牌。
+
+这是未签名的便携版。截图客户端需要配合接收端及你自己的 DSH 会话注入接口使用，不能单独完成 AI 陪玩。
+
+从源码运行：
+
 ```sh
 git clone https://github.com/kevinsouthxu/dsh-spectate
 cd dsh-spectate
@@ -73,6 +79,18 @@ Content-Type: application/json
 
 本仓库自带一个最小接收端：[`receiver/server.mjs`](receiver/server.mjs)。它收图后转发给任意"能往会话里塞内容"的地址，默认是 DSH 桥接的 `/api/inject`，你可以换成自己的实现。
 
+接收端需要 Node.js 18+。在 PowerShell 中启动示例：
+
+```powershell
+$env:SCREEN_TOKEN = '替换成你自己的长随机令牌'
+$env:INJECT_URL = 'http://127.0.0.1:3100/api/inject'
+$env:INJECT_KEY = '替换成你的桥接会话标识'
+# 下游桥接需要鉴权时，再设置 INJECT_TOKEN。
+node receiver/server.mjs
+```
+
+客户端填写相同的 `SCREEN_TOKEN`。`INJECT_URL` 是需要自行提供的桥接接口，接收 JSON `{key, text, image}`；返回非 2xx 或 JSON `ok:false` 会被视为失败。接收端默认关闭游戏模式，连接后在客户端开启。默认客户端地址为本机 `127.0.0.1:7422`，跨机器使用时改成接收端的局域网地址。
+
 ## 三种触发方式
 
 | 谁发起 | 怎么走 | 用在什么时候 |
@@ -89,7 +107,7 @@ GET  /latest     -> {"ok":true,"ageSec":1.2,"count":4,"image":"data:image/jpeg;b
 POST /trigger    -> 立刻抓一组并发出去，返回这次发送结果
 ```
 
-`pullToken` 留空表示不校验；把端口暴露到内网以外时请务必填一个。
+`pullToken` 留空时会自动生成并保存在本机配置中，调用反向接口须携带该 Bearer token。
 
 ## 预生成拼图
 
@@ -111,7 +129,7 @@ POST /trigger    -> 立刻抓一组并发出去，返回这次发送结果
 
 | 键 | 默认 | 说明 |
 |---|---|---|
-| `host` / `port` | 192.168.0.107 / 7422 | 观察服务地址 |
+| `host` / `port` | 127.0.0.1 / 7422 | 观察服务地址 |
 | `token` | 空 | Bearer token |
 | `burst` | 4 | 每次拼几帧（1–9） |
 | `gapMs` | 600 | 帧间隔（仅用于采集冗余帧时） |

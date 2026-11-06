@@ -8,7 +8,8 @@
   "author": "",
   "scripts": {
     "start": "electron .",
-    "dev": "electron . --dev"
+    "dev": "electron . --dev",
+    "pack:win": "electron-packager . dsh-spectate --platform=win32 --arch=x64 --out=release --asar --overwrite --ignore=\"^/(release|dist|receiver-state|shots|node_modules)($|/)\" --ignore=\"^/\\.env\" --ignore=\"^/config\\.json$\""
   },
   "keywords": [
     "dsh",

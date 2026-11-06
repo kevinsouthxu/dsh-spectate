@@ -50,11 +50,11 @@ function authed(req) {
   return String(req.headers.authorization || '') === 'Bearer ' + SCREEN_TOKEN;
 }
 
-/** 解析请求体：永远返回普通对象；JSON 非法返回 null；null/数组/标量当空对象。 */
+/** 只接受非空 JSON 对象；其他输入返回 null。 */
 function safeObject(raw) {
   try {
     const v = JSON.parse(raw || '{}');
-    if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
     return v;
   } catch {
     return null;
@@ -90,7 +90,7 @@ async function forward({ text, image }) {
     body: JSON.stringify({ key: INJECT_KEY, text, image })
   });
   const body = await res.text();
-  return { status: res.status, body: body.slice(0, 500) };
+  return { status: res.status, body };
 }
 
 function buildText(note) {
@@ -191,7 +191,7 @@ const server = http.createServer((req, res) => {
 
       log('inject mode=' + (body.mode || '?') + ' frames=' + (body.frames || '?') + ' http=' + r.status + ' ' +
         Math.round(Buffer.byteLength(data, 'base64') / 1024) + 'KB' + (downstreamOk ? '' : ' DOWNSTREAM-FAILED'));
-      json(downstreamOk ? 200 : 502, { ok: downstreamOk, detail: r.body });
+      json(downstreamOk ? 200 : 502, { ok: downstreamOk, detail: r.body.slice(0, 500) });
     } catch (e) {
       log('处理失败', (e && e.message) || String(e));
       json(500, { ok: false, error: (e && e.message) || String(e) });

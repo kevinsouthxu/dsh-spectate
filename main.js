@@ -15,7 +15,7 @@ const fs = require('node:fs');
 // ---------- 配置 ----------
 const CONFIG_PATH = () => path.join(app.getPath('userData'), 'config.json');
 const DEFAULTS = {
-  host: '192.168.0.107',
+  host: '127.0.0.1',
   port: 7422,
   token: '',
   burst: 4,

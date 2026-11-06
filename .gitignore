@@ -4,4 +4,8 @@ release/
 *.log
 .DS_Store
 Thumbs.db
-release/
+receiver-state/
+shots/
+.env
+.env.*
+config.json

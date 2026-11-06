@@ -172,7 +172,7 @@ async function afterShoot(res) {
 
 $('btn-save').addEventListener('click', async () => {
   const patch = {
-    host: $('cfg-host').value.trim() || '192.168.0.107',
+    host: $('cfg-host').value.trim() || '127.0.0.1',
     port: Number($('cfg-port').value) || 7422,
     token: $('cfg-token').value.trim(),
     burst: Math.max(1, Math.min(9, Number($('cfg-burst').value) || 4)),

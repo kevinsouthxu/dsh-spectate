@@ -228,6 +228,26 @@ async function sendFrames(mode = 'manual') {
   }
 }
 
+/** 把这次发出去的图和元数据落盘，便于回头核对「她看到的是什么」。 */
+function saveShot(dataUrl, meta) {
+  try {
+    const d = new Date();
+    const day = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    const stamp = String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') + String(d.getSeconds()).padStart(2, '0');
+    const dir = path.join(app.getPath('userData'), 'shots', day);
+    fs.mkdirSync(dir, { recursive: true });
+    const name = stamp + '-' + meta.mode;
+    const b64 = String(dataUrl).split(',')[1] || '';
+    fs.writeFileSync(path.join(dir, name + '.jpg'), Buffer.from(b64, 'base64'));
+    fs.appendFileSync(path.join(app.getPath('userData'), 'shots', 'index.jsonl'),
+      JSON.stringify(Object.assign({ day: day, name: name, at: d.toISOString() }, meta)) + '\n');
+    return name + '.jpg';
+  } catch (e) {
+    log('存图失败: ' + e.message);
+    return null;
+  }
+}
+
 async function doSendFrames(mode = 'manual') {
   if (!config.token) { state.lastError = '还没填令牌'; pushState(); return { ok: false, error: 'no token' }; }
   if (ring.length < 2) { state.lastError = '缓冲还没攒够'; pushState(); return { ok: false, error: 'buffer empty' }; }
@@ -262,6 +282,7 @@ async function doSendFrames(mode = 'manual') {
   }
   if (!dataUrl) return { ok: false, error: '窗口不可用' };
 
+  const shotName = saveShot(dataUrl, { mode: mode, frames: frames, motion: Number(state.motion.toFixed(2)), buffered: ring.length, cached: !!hitCache });
   const base64 = dataUrl.split(',')[1];
   const url = `http://${config.host}:${config.port}/screen`;
   const started = Date.now();
@@ -287,7 +308,9 @@ async function doSendFrames(mode = 'manual') {
       error: ok ? null : (body.error || text.slice(0, 120))
     };
     state.lastError = ok ? null : state.lastSend.error;
-    log(ok ? `已发送 ${frames} 帧 / ${state.lastSend.kb}KB / ${latency}ms${state.lastSend.cached ? '（命中预生成）' : '（实时拼图）'}` : `被拒：${state.lastSend.error}`);
+    log(ok
+      ? '已发送[' + mode + '] ' + frames + ' 帧 / ' + state.lastSend.kb + 'KB / ' + latency + 'ms' + (state.lastSend.cached ? '（预生成）' : '（实时拼图）') + ' → shots/' + (shotName || '?')
+      : '被拒[' + mode + ']：' + state.lastSend.error);
     pushState();
     return { ok, ...state.lastSend };
   } catch (e) {

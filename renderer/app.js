@@ -130,6 +130,7 @@ function fillSettings(c) {
   $('cfg-hk-single').value = c.hotkeySingle;
   $('cfg-motion').checked = !!c.motionTrigger;
   $('cfg-motion-th').value = c.motionThreshold;
+  $('cfg-motion-sustain').value = c.motionSustain;
   $('cfg-motion-cool').value = c.motionCooldownSec;
   $('cfg-note').value = c.note;
 }
@@ -169,6 +170,7 @@ $('btn-save').addEventListener('click', async () => {
     hotkeySingle: $('cfg-hk-single').value.trim() || 'F10',
     motionTrigger: $('cfg-motion').checked,
     motionThreshold: Math.max(5, Math.min(120, Number($('cfg-motion-th').value) || 25)),
+    motionSustain: Math.max(1, Math.min(9, Number($('cfg-motion-sustain').value) || 3)),
     motionCooldownSec: Math.max(15, Number($('cfg-motion-cool').value) || 60),
     note: $('cfg-note').value.trim()
   };

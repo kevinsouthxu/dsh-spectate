@@ -33,7 +33,8 @@ const DEFAULTS = {
   freshMaxSec: 20,            // 最新帧超过这个年龄就不发（宁可晚，不能早）
   precomposeMs: 2000,         // 预生成拼图的节奏
   motionTrigger: false,       // 画面剧变自动连拍
-  motionThreshold: 8,         // 触发阈值（逐像素平均差；静止 0~2，小窗口弹动 3~5，全屏团战 10+）
+  motionThreshold: 4,         // 触发阈值（逐像素平均差；静止 0~2，弹窗 3~4，全屏动作 8+）
+  motionSustain: 3,           // 需要连续多少帧都过阈值才算（1 = 单帧即触发，会误捕商店/结算）
   motionCooldownSec: 60,      // 两次运动触发之间的最短间隔
   pullPort: 7423,             // 反向端口：主机端可以让它"现在截一张"
   pullToken: ''               // 反向端口令牌，留空表示不校验（只绑内网时够用）
@@ -196,16 +197,24 @@ async function composeFrames(frames) {
 let lastMotionSendAt = 0;
 
 /** 画面剧变触发：分数越过阈值且过了冷却，就自己连拍一组。 */
+const motionHistory = [];
 function maybeMotionTrigger(m) {
   if (!config.motionTrigger) return;
+  motionHistory.push(m);
+  if (motionHistory.length > 9) motionHistory.shift();
+
   if (state.sending) return;
   const now = Date.now();
   const cool = Math.max(15, Number(config.motionCooldownSec) || 60) * 1000;
   if (now - lastMotionSendAt < cool) return;
-  const th = Number(config.motionThreshold) || 25;
-  if (m < th) return;
+  const th = Number(config.motionThreshold) || 5;
+  const need = Math.max(1, Math.min(9, Number(config.motionSustain) || 3));
+  if (motionHistory.length < need) return;
+  const recent = motionHistory.slice(-need);
+  const passed = recent.filter((v) => v >= th).length;
+  if (passed < need) return;   // 必须连续 need 帧都过阈值
   lastMotionSendAt = now;
-  log(`运动触发：分数 ${m.toFixed(1)} ≥ ${th}，冷却 ${Math.round(cool / 1000)}s`);
+  log(`运动触发：连续 ${need} 帧 ≥ ${th}（最近 ${recent.map((v) => v.toFixed(1)).join('/')}），冷却 ${Math.round(cool / 1000)}s`);
   sendFrames('motion').catch(() => {});
 }
 

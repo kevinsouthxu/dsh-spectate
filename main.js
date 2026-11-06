@@ -33,7 +33,7 @@ const DEFAULTS = {
   freshMaxSec: 20,            // 最新帧超过这个年龄就不发（宁可晚，不能早）
   precomposeMs: 2000,         // 预生成拼图的节奏
   motionTrigger: false,       // 画面剧变自动连拍
-  motionThreshold: 4,         // 触发阈值（逐像素平均差；静止 0~2，弹窗 3~4，全屏动作 8+）
+  motionThreshold: 8,         // 触发阈值（逐像素平均差；静止 0~2，站桩晃镜头 3~5，真打起来 8+）
   motionSustain: 3,           // 需要连续多少帧都过阈值才算（1 = 单帧即触发，会误捕商店/结算）
   motionCooldownSec: 60,      // 两次运动触发之间的最短间隔
   pullPort: 7423,             // 反向端口：主机端可以让它"现在截一张"

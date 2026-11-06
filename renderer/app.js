@@ -48,6 +48,21 @@ window.composeFrames = async function composeFrames(frames) {
     ctx.strokeRect(cx + 0.5, cy + 0.5, cellW - 1, cellH - 1);
   });
 
+  // 拼图后统一缩到 1280 长边：token 直接降到约 1/4，可读性几乎无损
+  const MAX_COMPOSITE_EDGE = 1280;
+  const longest = Math.max(canvas.width, canvas.height);
+  if (longest > MAX_COMPOSITE_EDGE) {
+    const k = MAX_COMPOSITE_EDGE / longest;
+    const small = document.createElement('canvas');
+    small.width = Math.round(canvas.width * k);
+    small.height = Math.round(canvas.height * k);
+    const sctx = small.getContext('2d');
+    sctx.imageSmoothingEnabled = true;
+    sctx.imageSmoothingQuality = 'high';
+    sctx.drawImage(canvas, 0, 0, small.width, small.height);
+    return small.toDataURL('image/jpeg', 0.82);
+  }
+
   return canvas.toDataURL('image/jpeg', 0.82);
 };
 

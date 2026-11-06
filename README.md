@@ -29,7 +29,28 @@
 
 ## 安装
 
-Windows 用户可从本仓库 Releases 下载 `dsh-spectate-v0.1.0-win32-x64.zip`，解压后运行 `dsh-spectate.exe`，无需安装 Node.js。首次运行需配置接收端地址与令牌。
+### 系统要求
+
+| 用途 | 要求 |
+|---|---|
+| Windows 便携客户端 | Windows 10 / 11，x64（64 位）；自带 Electron，无需安装 Node.js |
+| 接收端 | Node.js 18+，建议使用仍受维护的 LTS 版本；需自行提供 DSH / QQ 会话注入接口 |
+| 源码运行与打包 | Node.js 22.12+、npm、Git |
+
+Windows 范围依据 [Electron 官方支持平台](https://github.com/electron/electron#platform-support)。本项目仅提供 Windows x64 包，不提供 Windows 7 / 8 或 32 位包；未对每个 Windows 版本及游戏组合完成实测。
+
+### 下载与校验
+
+Windows 用户可从 [最新 Release](https://github.com/kevinsouthxu/dsh-spectate/releases/latest) 下载 `dsh-spectate-v0.1.1-win32-x64.zip`，完整解压后运行 `dsh-spectate-win32-x64/dsh-spectate.exe`。首次运行需配置接收端地址与令牌。界面顶部及窗口标题显示版本号，反馈问题时请附上它。
+
+同时下载同一 Release 的 `SHA256SUMS.txt`，在下载目录打开终端执行：
+
+```powershell
+certutil -hashfile .\dsh-spectate-v0.1.1-win32-x64.zip SHA256
+certutil -hashfile .\dsh-spectate-v0.1.1-receiver.zip SHA256
+```
+
+将输出的 SHA-256 与 `SHA256SUMS.txt` 中对应文件名的值比较，应完全一致（大小写不影响）。只下载客户端时只需执行第一条。
 
 这是未签名的便携版。截图客户端需要配合接收端及你自己的 DSH 会话注入接口使用，不能单独完成 AI 陪玩。
 
@@ -99,7 +120,7 @@ node receiver/server.mjs
 | **定时** | 变速启动 `ramp: [45, 90, 180, 240]`，之后固定 `intervalSec` | 长时间挂机，保持"她在看"的在场感 |
 | **她** | 她回一句「让我看看」之类的请求，主机端转发到 `:7423/trigger`，立刻截一张 | 她主动想确认你在干嘛 |
 
-反向拉取服务（`:7423`，默认绑 0.0.0.0）：
+反向拉取服务（`:7423`，默认绑 `127.0.0.1`）：
 
 ```http
 GET  /ping       -> {"ok":true,"service":"dsh-spectate","buffered":12}
@@ -142,7 +163,7 @@ POST /trigger    -> 立刻抓一组并发出去，返回这次发送结果
 ## 已知限制
 
 - 长时间高分辨率抓屏会吃 CPU，低配机器建议把 `sampleMs` 调到 800–1000
-- 独占全屏 + HDR 下 `desktopCapturer` 可能拿到黑屏，改成无边框窗口即可
+- 独占全屏或 HDR 下 `desktopCapturer` 可能拿到黑屏，可先尝试无边框窗口，必要时关闭 HDR
 - 只抓主显示器
 - 窗口关了不会退出，走托盘；要真退出用托盘菜单
 - 反向拉取服务默认只绑 `127.0.0.1`；要让别的机器触发，把配置里的 `pullBind` 改成 `0.0.0.0`（首次启动会自动生成 `pullToken`）

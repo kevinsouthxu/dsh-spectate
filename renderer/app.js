@@ -226,6 +226,8 @@ api.onLog((line) => {
 (async function init() {
   const boot = await api.bootstrap();
   fillSettings(boot.config);
+  $('app-version').textContent = `v${boot.version}`;
+  document.title = `陪玩台 v${boot.version}`;
   renderState(boot);
   $('log').textContent = (boot.logs || []).join('\n');
   $('log').scrollTop = $('log').scrollHeight;

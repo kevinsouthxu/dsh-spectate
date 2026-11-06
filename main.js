@@ -473,7 +473,7 @@ function createWindow() {
     minWidth: 480,
     minHeight: 620,
     backgroundColor: '#12141a',
-    title: '陪玩台',
+    title: `陪玩台 v${app.getVersion()}`,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -490,6 +490,7 @@ function createWindow() {
 
 // ---------- IPC ----------
 ipcMain.handle('get-bootstrap', () => ({
+  version: app.getVersion(),
   config,
   sheet: state.sheet,
   state: {

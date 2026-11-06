@@ -1,0 +1,15 @@
+{
+  "name": "dsh-spectate",
+  "version": "0.1.0",
+  "description": "陪玩台 — 让 AI 陪你看游戏的可视化观察台（DSH / 大肥鱼配套）",
+  "main": "main.js",
+  "private": false,
+  "license": "MIT",
+  "author": "",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev"
+  },
+  "keywords": ["dsh", "electron", "game", "companion", "vision"],
+  "devDependencies": {}
+}

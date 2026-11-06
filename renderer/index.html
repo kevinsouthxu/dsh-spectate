@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+  <title>陪玩台</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="dot" id="conn-dot"></span>
+      <span class="title">陪玩台</span>
+    </div>
+    <div class="status" id="conn-text">连接中…</div>
+  </header>
+
+  <section class="cards">
+    <div class="card">
+      <div class="label">游戏模式</div>
+      <div class="value" id="gm-value">—</div>
+    </div>
+    <div class="card">
+      <div class="label">缓冲</div>
+      <div class="value"><span id="buf-value">0</span> 帧</div>
+    </div>
+    <div class="card">
+      <div class="label">运动</div>
+      <div class="value"><span id="motion-value">0</span></div>
+      <div class="bar"><i id="motion-bar"></i></div>
+    </div>
+  </section>
+
+  <section class="preview">
+    <div class="preview-head">
+      <span>最近一次拼图</span>
+      <span class="muted" id="send-info">还没有发送</span>
+    </div>
+    <canvas id="preview"></canvas>
+    <div class="preview-empty" id="preview-empty">按 F9 连拍 / F10 单张，这里会显示她看到的画面</div>
+  </section>
+
+  <section class="actions">
+    <button id="btn-auto" class="primary">开始观察</button>
+    <button id="btn-single">看一眼 <kbd id="hk-single">F10</kbd></button>
+    <button id="btn-burst">连拍 <kbd id="hk-burst">F9</kbd></button>
+  </section>
+
+  <details class="settings">
+    <summary>设置</summary>
+    <div class="grid">
+      <label>主机 <input id="cfg-host" placeholder="192.168.0.107" /></label>
+      <label>端口 <input id="cfg-port" type="number" /></label>
+      <label class="wide">令牌 <input id="cfg-token" placeholder="scr-..." /></label>
+      <label>连拍帧数 <input id="cfg-burst" type="number" min="1" max="9" /></label>
+      <label>帧间隔(ms) <input id="cfg-gap" type="number" min="100" step="100" /></label>
+      <label>自动间隔(s) <input id="cfg-interval" type="number" min="30" /></label>
+      <label>缓冲(s) <input id="cfg-buffer" type="number" min="2" /></label>
+      <label>采样(ms) <input id="cfg-sample" type="number" min="100" step="100" /></label>
+      <label>画质 <input id="cfg-quality" type="number" min="30" max="95" /></label>
+      <label>热键·连拍 <input id="cfg-hk-burst" /></label>
+      <label>热键·单张 <input id="cfg-hk-single" /></label>
+      <label class="wide">附带说明 <input id="cfg-note" placeholder="例如：在打大乱斗" /></label>
+    </div>
+    <div class="settings-actions">
+      <button id="btn-save">保存并应用</button>
+      <button id="btn-gm-on" class="ghost">开游戏模式</button>
+      <button id="btn-gm-off" class="ghost">关游戏模式</button>
+      <button id="btn-open" class="ghost">打开数据目录</button>
+    </div>
+  </details>
+
+  <section class="logs">
+    <div class="logs-head">日志</div>
+    <pre id="log"></pre>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>

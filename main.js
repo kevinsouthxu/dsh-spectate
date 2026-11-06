@@ -37,7 +37,8 @@ const DEFAULTS = {
   motionSustain: 3,           // 需要连续多少帧都过阈值才算（1 = 单帧即触发，会误捕商店/结算）
   motionCooldownSec: 60,      // 两次运动触发之间的最短间隔
   pullPort: 7423,             // 反向端口：主机端可以让它"现在截一张"
-  pullToken: ''               // 反向端口令牌，留空表示不校验（只绑内网时够用）
+  pullBind: '127.0.0.1',      // 默认只允许本机；要让主机端跨机器触发时改成 '0.0.0.0'
+  pullToken: ''               // 留空则自动生成并存进配置
 };
 
 function loadConfig() {
@@ -218,11 +219,11 @@ function maybeMotionTrigger(m) {
   sendFrames('motion').catch(() => {});
 }
 
-async function sendFrames(mode = 'manual') {
+async function sendFrames(mode = 'manual', countOverride = 0) {
   if (state.sending) return { ok: false, error: 'busy' };
   state.sending = true;
   try {
-    return await doSendFrames(mode);
+    return await doSendFrames(mode, countOverride);
   } finally {
     state.sending = false;
   }
@@ -248,11 +249,11 @@ function saveShot(dataUrl, meta) {
   }
 }
 
-async function doSendFrames(mode = 'manual') {
+async function doSendFrames(mode = 'manual', countOverride = 0) {
   if (!config.token) { state.lastError = '还没填令牌'; pushState(); return { ok: false, error: 'no token' }; }
   if (ring.length < 2) { state.lastError = '缓冲还没攒够'; pushState(); return { ok: false, error: 'buffer empty' }; }
 
-  const take = Math.max(1, Math.min(9, config.burst));
+  const take = Math.max(1, Math.min(9, countOverride || config.burst));
 
   // 帧年龄闸：宁可晚，不能早
   const newest = ring[ring.length - 1];
@@ -267,7 +268,7 @@ async function doSendFrames(mode = 'manual') {
   let dataUrl = null;
   let frames = take;
   let hitCache = false;
-  const sheetFresh = state.sheet && Date.now() - state.sheet.at < (config.precomposeMs + 2500);
+  const sheetFresh = state.sheet && Date.now() - state.sheet.at < 1500;   // 太旧的预生成图会错过最后那一下
   if (sheetFresh && state.sheet.count === take) {
     dataUrl = state.sheet.dataUrl;      // 命中预生成，0 延迟
     hitCache = true;
@@ -288,11 +289,12 @@ async function doSendFrames(mode = 'manual') {
   const started = Date.now();
   try {
     const res = await fetch(url, {
+      signal: AbortSignal.timeout(45000),
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${config.token}` },
       body: JSON.stringify({
         image: { mediaType: 'image/jpeg', data: base64, name: 'game.jpg', note: config.note || '' },
-        frames: frames.length,
+        frames: frames,
         mode
       })
     });
@@ -442,7 +444,7 @@ function registerHotkeys() {
     } catch (e) { log(`${label} ${accel} 注册异常: ${e.message}`); }
   };
   bind(config.hotkeyBurst, () => sendFrames('hotkey-burst'), '连拍');
-  bind(config.hotkeySingle, () => sendFrames('hotkey-single'), '单张');
+  bind(config.hotkeySingle, () => sendFrames('hotkey-single', 1), '单张');
 }
 
 // ---------- 托盘 ----------
@@ -450,7 +452,7 @@ function updateTray() {
   if (!tray) return;
   const menu = Menu.buildFromTemplate([
     { label: state.auto ? '停止自动观察' : '开始自动观察', click: () => (state.auto ? stopAuto() : startAuto()) },
-    { label: `看一眼（${config.hotkeySingle}）`, click: () => sendFrames('tray') },
+    { label: `看一眼（${config.hotkeySingle}）`, click: () => sendFrames('tray', 1) },
     { label: `连拍 ${config.burst} 帧（${config.hotkeyBurst}）`, click: () => sendFrames('tray-burst') },
     { type: 'separator' },
     { label: '游戏模式：开', click: () => gameMode('on') },
@@ -520,6 +522,11 @@ ipcMain.handle('open-userdata', () => shell.openPath(app.getPath('userData')));
 let pullServer = null;
 function startPullServer() {
   try { pullServer?.close(); } catch {}
+  if (!config.pullToken) {
+    config.pullToken = 'pull-' + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
+    saveConfig(config);
+    log('已自动生成拉取令牌，写入配置（pullToken）');
+  }
   const http = require('node:http');
   pullServer = http.createServer(async (req, res) => {
     const url = new URL(req.url || '/', 'http://127.0.0.1');
@@ -543,7 +550,7 @@ function startPullServer() {
     if (req.method === 'GET' && url.pathname === '/ping') { json(200, { ok: true, service: 'dsh-spectate', buffered: ring.length }); return; }
     json(404, { ok: false, error: 'not found' });
   });
-  pullServer.listen(config.pullPort, '0.0.0.0', () => log(`拉取服务已启动 :${config.pullPort}`));
+  pullServer.listen(config.pullPort, config.pullBind || '127.0.0.1', () => log('拉取服务已启动 ' + (config.pullBind || '127.0.0.1') + ':' + config.pullPort));
   pullServer.on('error', (e) => log('拉取服务启动失败: ' + e.message));
 }
 

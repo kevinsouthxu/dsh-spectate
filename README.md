@@ -25,6 +25,15 @@
 - **托盘常驻**：点图标显示/隐藏，右键菜单可直接"看一眼""开游戏模式"
 - **两种触发分离**：手动热键不受间隔限制，自动观察走自己的节奏
 
+## 安装
+
+```sh
+git clone https://github.com/kevinsouthxu/dsh-spectate
+cd dsh-spectate
+npm install
+npm start
+```
+
 ## 快速开始
 
 ```sh

@@ -514,7 +514,7 @@ ipcMain.handle('save-config', (_e, patch) => {
 });
 
 ipcMain.handle('toggle-auto', () => { state.auto ? stopAuto() : startAuto(); return state.auto; });
-ipcMain.handle('shoot', async (_e, mode) => sendFrames(mode || 'manual'));
+ipcMain.handle('shoot', async (_e, mode, count) => sendFrames(mode || 'manual', Number(count) || 0));
 ipcMain.handle('game-mode', (_e, action) => gameMode(action));
 ipcMain.handle('open-userdata', () => shell.openPath(app.getPath('userData')));
 

@@ -154,7 +154,7 @@ function fillSettings(c) {
 $('btn-auto').addEventListener('click', () => api.toggleAuto());
 
 $('btn-single').addEventListener('click', async () => {
-  const r = await api.shoot('ui-single');
+  const r = await api.shoot('ui-single', 1);
   await afterShoot(r);
 });
 

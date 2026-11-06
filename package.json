@@ -10,6 +10,15 @@
     "start": "electron .",
     "dev": "electron . --dev"
   },
-  "keywords": ["dsh", "electron", "game", "companion", "vision"],
-  "devDependencies": {}
+  "keywords": [
+    "dsh",
+    "electron",
+    "game",
+    "companion",
+    "vision"
+  ],
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^45.2.3"
+  }
 }

@@ -62,6 +62,34 @@ Content-Type: application/json
 
 参考实现见 [dshqq](https://github.com/) 的 `src/screen-inject-server.js`（收图 → 缩图 → 带图注入 AI 会话）。
 
+## 三种触发方式
+
+| 谁发起 | 怎么走 | 用在什么时候 |
+|---|---|---|
+| **你** | 按 F9 / F10（全局热键，全屏游戏也生效） | 看到精彩瞬间，想让她点评 |
+| **定时** | 变速启动 `ramp: [45, 90, 180, 240]`，之后固定 `intervalSec` | 长时间挂机，保持"她在看"的在场感 |
+| **她** | 她回一句「让我看看」之类的请求，主机端转发到 `:7423/trigger`，立刻截一张 | 她主动想确认你在干嘛 |
+
+反向拉取服务（`:7423`，默认绑 0.0.0.0）：
+
+```http
+GET  /ping       -> {"ok":true,"service":"dsh-spectate","buffered":12}
+GET  /latest     -> {"ok":true,"ageSec":1.2,"count":4,"image":"data:image/jpeg;base64,..."}
+POST /trigger    -> 立刻抓一组并发出去，返回这次发送结果
+```
+
+`pullToken` 留空表示不校验；把端口暴露到内网以外时请务必填一个。
+
+## 预生成拼图
+
+后台每 `precomposeMs`（默认 2 秒）把「最近 `burst` 帧」拼好放着。按下热键时直接发这张，不再现场拼——省掉两百多毫秒的 canvas 合成。
+
+## 帧老龄闸
+
+最新一帧超过 `freshMaxSec`（默认 20 秒）就不发，直接返回 `stale-frames`。
+
+理由跟 `dsh-watch-together` 里那条一样：**宁可晚，不能早**。对着二十秒前的画面点评，比不说话更糟。
+
 ## 配置
 
 配置存在 Electron 的 userData 目录（界面里「设置 → 打开数据目录」可直接打开）：

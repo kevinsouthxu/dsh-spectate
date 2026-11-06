@@ -31,7 +31,9 @@ const DEFAULTS = {
   autoStart: false,
   ramp: [45, 90, 180, 240],   // 变速启动：前几次间隔短，之后固定 intervalSec
   freshMaxSec: 20,            // 最新帧超过这个年龄就不发（宁可晚，不能早）
-  precomposeMs: 2000          // 预生成拼图的节奏
+  precomposeMs: 2000,         // 预生成拼图的节奏
+  pullPort: 7423,             // 反向端口：主机端可以让它"现在截一张"
+  pullToken: ''               // 反向端口令牌，留空表示不校验（只绑内网时够用）
 };
 
 function loadConfig() {
@@ -407,6 +409,7 @@ ipcMain.handle('save-config', (_e, patch) => {
   config = { ...config, ...patch };
   saveConfig(config);
   registerHotkeys();
+  startPullServer();
   if (state.auto) { stopAuto(); startAuto(); }
   pushState();
   return config;
@@ -416,6 +419,37 @@ ipcMain.handle('toggle-auto', () => { state.auto ? stopAuto() : startAuto(); ret
 ipcMain.handle('shoot', async (_e, mode) => sendFrames(mode || 'manual'));
 ipcMain.handle('game-mode', (_e, action) => gameMode(action));
 ipcMain.handle('open-userdata', () => shell.openPath(app.getPath('userData')));
+
+// ---------- 反向拉取：主机端可以让它立刻截一张 ----------
+let pullServer = null;
+function startPullServer() {
+  try { pullServer?.close(); } catch {}
+  const http = require('node:http');
+  pullServer = http.createServer(async (req, res) => {
+    const url = new URL(req.url || '/', 'http://127.0.0.1');
+    const json = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
+    if (config.pullToken) {
+      const auth = String(req.headers.authorization || '');
+      if (auth !== `Bearer ${config.pullToken}`) { json(401, { ok: false, error: 'bad token' }); return; }
+    }
+    if (req.method === 'GET' && url.pathname === '/latest') {
+      if (!state.sheet) { json(404, { ok: false, error: '还没有拼图' }); return; }
+      const ageSec = (Date.now() - state.sheet.at) / 1000;
+      json(200, { ok: true, at: state.sheet.at, ageSec, count: state.sheet.count, image: state.sheet.dataUrl });
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/trigger') {
+      log('收到拉取请求，立刻截一张');
+      const r = await sendFrames('pull').catch((e) => ({ ok: false, error: e.message }));
+      json(r?.ok ? 200 : 502, r || { ok: false });
+      return;
+    }
+    if (req.method === 'GET' && url.pathname === '/ping') { json(200, { ok: true, service: 'dsh-spectate', buffered: ring.length }); return; }
+    json(404, { ok: false, error: 'not found' });
+  });
+  pullServer.listen(config.pullPort, '0.0.0.0', () => log(`拉取服务已启动 :${config.pullPort}`));
+  pullServer.on('error', (e) => log('拉取服务启动失败: ' + e.message));
+}
 
 // ---------- 生命周期 ----------
 app.whenReady().then(async () => {
@@ -430,6 +464,7 @@ app.whenReady().then(async () => {
 
   startSampling();
   registerHotkeys();
+  startPullServer();
   gameMode('get').catch(() => {});
   if (config.autoStart) startAuto();
   log('陪玩台已启动');

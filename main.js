@@ -32,12 +32,19 @@ const DEFAULTS = {
   ramp: [45, 90, 180, 240],   // 变速启动：前几次间隔短，之后固定 intervalSec
   freshMaxSec: 20,            // 最新帧超过这个年龄就不发（宁可晚，不能早）
   precomposeMs: 2000,         // 预生成拼图的节奏
+  motionTrigger: false,       // 画面剧变自动连拍
+  motionThreshold: 8,         // 触发阈值（逐像素平均差；静止 0~2，小窗口弹动 3~5，全屏团战 10+）
+  motionCooldownSec: 60,      // 两次运动触发之间的最短间隔
   pullPort: 7423,             // 反向端口：主机端可以让它"现在截一张"
   pullToken: ''               // 反向端口令牌，留空表示不校验（只绑内网时够用）
 };
 
 function loadConfig() {
-  try { return { ...DEFAULTS, ...JSON.parse(fs.readFileSync(CONFIG_PATH(), 'utf8')) }; }
+  try {
+    // 记事本另存会带 BOM，直接 JSON.parse 会炸，先剥掉
+    const raw = fs.readFileSync(CONFIG_PATH(), 'utf8').replace(/^\uFEFF/, '');
+    return { ...DEFAULTS, ...JSON.parse(raw) };
+  }
   catch { return { ...DEFAULTS }; }
 }
 function saveConfig(cfg) {
@@ -98,21 +105,18 @@ async function grabOnce(width) {
   return sources[0].thumbnail;
 }
 
-/** 运动分：把缩略图缩到 48×27 算平均绝对差（0~255） */
+/** 运动分：48×27 网格上逐像素平均绝对差（0~255），比"平均亮度差"灵敏得多。 */
 function motionScore(image) {
   const small = image.resize({ width: 48, height: 27, quality: 'good' });
   const buf = small.toBitmap(); // BGRA
+  const prev = state.prevPixels;
+  state.prevPixels = Buffer.from(buf);
+  if (!prev || prev.length !== buf.length) return 0;
   let sum = 0;
-  let n = 0;
   for (let i = 0; i < buf.length; i += 4) {
-    sum += buf[i] + buf[i + 1] + buf[i + 2];
-    n += 3;
+    sum += Math.abs(buf[i] - prev[i]) + Math.abs(buf[i + 1] - prev[i + 1]) + Math.abs(buf[i + 2] - prev[i + 2]);
   }
-  const avg = sum / Math.max(1, n);
-  const prev = state.prevLuma;
-  state.prevLuma = avg;
-  if (prev === undefined) return 0;
-  return Math.abs(avg - prev);
+  return sum / (buf.length / 4 * 3);
 }
 
 async function sampleTick() {
@@ -122,6 +126,7 @@ async function sampleTick() {
     const img = await grabOnce(config.maxEdge);
     const m = motionScore(img);
     state.motion = m;
+    maybeMotionTrigger(m);
     const jpeg = img.toJPEG(config.quality);
     pushFrame({ at: Date.now(), jpeg, width: img.getSize().width, height: img.getSize().height, motion: m });
     state.frames += 1;
@@ -188,7 +193,33 @@ async function composeFrames(frames) {
 }
 
 // ---------- 发送 ----------
+let lastMotionSendAt = 0;
+
+/** 画面剧变触发：分数越过阈值且过了冷却，就自己连拍一组。 */
+function maybeMotionTrigger(m) {
+  if (!config.motionTrigger) return;
+  if (state.sending) return;
+  const now = Date.now();
+  const cool = Math.max(15, Number(config.motionCooldownSec) || 60) * 1000;
+  if (now - lastMotionSendAt < cool) return;
+  const th = Number(config.motionThreshold) || 25;
+  if (m < th) return;
+  lastMotionSendAt = now;
+  log(`运动触发：分数 ${m.toFixed(1)} ≥ ${th}，冷却 ${Math.round(cool / 1000)}s`);
+  sendFrames('motion').catch(() => {});
+}
+
 async function sendFrames(mode = 'manual') {
+  if (state.sending) return { ok: false, error: 'busy' };
+  state.sending = true;
+  try {
+    return await doSendFrames(mode);
+  } finally {
+    state.sending = false;
+  }
+}
+
+async function doSendFrames(mode = 'manual') {
   if (!config.token) { state.lastError = '还没填令牌'; pushState(); return { ok: false, error: 'no token' }; }
   if (ring.length < 2) { state.lastError = '缓冲还没攒够'; pushState(); return { ok: false, error: 'buffer empty' }; }
 
@@ -360,7 +391,9 @@ function pushState() {
         sheetAgeSec: state.sheet ? (Date.now() - state.sheet.at) / 1000 : null,
         newestAgeSec: ring.length ? (Date.now() - ring[ring.length - 1].at) / 1000 : null,
         nextAutoAt: state.nextAutoAt || null,
-        health: state.health || null
+        health: state.health || null,
+        motionTrigger: !!config.motionTrigger,
+        lastMotionSendAt: lastMotionSendAt || null
       }
     });
     updateTray();
@@ -437,6 +470,7 @@ ipcMain.handle('get-bootstrap', () => ({
 ipcMain.handle('save-config', (_e, patch) => {
   config = { ...config, ...patch };
   saveConfig(config);
+  state.lastError = null; // 保存后清掉旧错误
   registerHotkeys();
   startPullServer();
   startHealth();

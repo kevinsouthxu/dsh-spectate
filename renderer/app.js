@@ -128,6 +128,9 @@ function fillSettings(c) {
   $('cfg-quality').value = c.quality;
   $('cfg-hk-burst').value = c.hotkeyBurst;
   $('cfg-hk-single').value = c.hotkeySingle;
+  $('cfg-motion').checked = !!c.motionTrigger;
+  $('cfg-motion-th').value = c.motionThreshold;
+  $('cfg-motion-cool').value = c.motionCooldownSec;
   $('cfg-note').value = c.note;
 }
 
@@ -164,10 +167,17 @@ $('btn-save').addEventListener('click', async () => {
     quality: Math.max(30, Math.min(95, Number($('cfg-quality').value) || 72)),
     hotkeyBurst: $('cfg-hk-burst').value.trim() || 'F9',
     hotkeySingle: $('cfg-hk-single').value.trim() || 'F10',
+    motionTrigger: $('cfg-motion').checked,
+    motionThreshold: Math.max(5, Math.min(120, Number($('cfg-motion-th').value) || 25)),
+    motionCooldownSec: Math.max(15, Number($('cfg-motion-cool').value) || 60),
     note: $('cfg-note').value.trim()
   };
   const saved = await api.saveConfig(patch);
   fillSettings(saved);
+  const btn = $('btn-save');
+  const old = btn.textContent;
+  btn.textContent = '✓ 已保存';
+  setTimeout(() => { btn.textContent = old; }, 1600);
 });
 
 $('btn-gm-on').addEventListener('click', () => api.gameMode('on'));

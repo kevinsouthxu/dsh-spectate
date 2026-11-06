@@ -74,9 +74,19 @@ function renderState(payload) {
   cfg = c;
 
   const dot = $('conn-dot');
-  if (s.lastError) { dot.className = 'dot bad'; $('conn-text').textContent = s.lastError; }
-  else if (s.lastSend?.ok) { dot.className = 'dot on'; $('conn-text').textContent = `已连接 · ${c.host}:${c.port}`; }
-  else { dot.className = 'dot'; $('conn-text').textContent = `待发送 · ${c.host}:${c.port}`; }
+  const h = s.health;
+  if (h && h.ok) {
+    const gmOn = h.gameMode?.enabled;
+    dot.className = gmOn ? 'dot on' : 'dot warn';
+    const tail = gmOn ? '游戏模式开' : '游戏模式关';
+    $('conn-text').textContent = `已连接 ${c.host}:${c.port} · ${h.latency}ms · ${tail}`;
+  } else if (h && !h.ok) {
+    dot.className = 'dot bad';
+    $('conn-text').textContent = `连不上 ${c.host}:${c.port}（${h.error || '超时'}）`;
+  } else {
+    dot.className = 'dot';
+    $('conn-text').textContent = `检测中… ${c.host}:${c.port}`;
+  }
 
   const gm = s.gameMode;
   if (gm && gm.enabled) {

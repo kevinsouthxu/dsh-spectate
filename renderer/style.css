@@ -74,3 +74,4 @@ input:focus { border-color: var(--accent); }
 .logs { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; height: 96px; display: flex; flex-direction: column; }
 .logs-head { color: var(--muted); font-size: 11px; margin-bottom: 4px; }
 #log { margin: 0; flex: 1; overflow: auto; font: 11px/1.45 Consolas, monospace; color: #98a1b5; white-space: pre-wrap; user-select: text; }
+.dot.warn { background: var(--warn); }

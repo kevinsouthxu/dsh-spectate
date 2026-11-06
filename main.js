@@ -322,6 +322,34 @@ async function gameMode(action) {
   return state.gameMode;
 }
 
+let healthTimer = null;
+async function pollHealth() {
+  const base = `http://${config.host}:${config.port}`;
+  const started = Date.now();
+  try {
+    const r = await fetch(base + '/screen/ping', { signal: AbortSignal.timeout(4000) });
+    const j = await r.json().catch(() => ({}));
+    const gm = await fetch(base + '/game-mode', { signal: AbortSignal.timeout(4000) })
+      .then((x) => x.json()).catch(() => null);
+    state.health = {
+      ok: r.ok && j.ok === true,
+      latency: Date.now() - started,
+      gameMode: gm ? { enabled: !!gm.enabled, untilMs: gm.untilMs } : null,
+      at: Date.now()
+    };
+    if (gm) state.gameMode = gm;
+  } catch (e) {
+    state.health = { ok: false, error: e.message, latency: Date.now() - started, at: Date.now() };
+  }
+  pushState();
+}
+
+function startHealth() {
+  clearInterval(healthTimer);
+  pollHealth();
+  healthTimer = setInterval(pollHealth, 15000);
+}
+
 function pushState() {
   try {
     win?.webContents.send('state', {
@@ -331,7 +359,8 @@ function pushState() {
         lastSend: state.lastSend, lastError: state.lastError, gameMode: state.gameMode,
         sheetAgeSec: state.sheet ? (Date.now() - state.sheet.at) / 1000 : null,
         newestAgeSec: ring.length ? (Date.now() - ring[ring.length - 1].at) / 1000 : null,
-        nextAutoAt: state.nextAutoAt || null
+        nextAutoAt: state.nextAutoAt || null,
+        health: state.health || null
       }
     });
     updateTray();
@@ -410,6 +439,7 @@ ipcMain.handle('save-config', (_e, patch) => {
   saveConfig(config);
   registerHotkeys();
   startPullServer();
+  startHealth();
   if (state.auto) { stopAuto(); startAuto(); }
   pushState();
   return config;
@@ -465,6 +495,7 @@ app.whenReady().then(async () => {
   startSampling();
   registerHotkeys();
   startPullServer();
+  startHealth();
   gameMode('get').catch(() => {});
   if (config.autoStart) startAuto();
   log('陪玩台已启动');

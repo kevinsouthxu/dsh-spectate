@@ -175,6 +175,10 @@ api.onMotion(({ motion }) => {
   api.bootstrap().then((b) => { $('buf-value').textContent = String(b.state.buffered ?? 0); }).catch(() => {});
 });
 
+api.onSheet((sheet) => {
+  if (sheet?.dataUrl) renderPreview(sheet.dataUrl, `预生成 ${sheet.count} 帧 · ${new Date(sheet.at).toLocaleTimeString('zh-CN', { hour12: false })}`);
+});
+
 api.onLog((line) => {
   const el = $('log');
   el.textContent += line + '\n';

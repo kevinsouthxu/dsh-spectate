@@ -28,7 +28,10 @@ const DEFAULTS = {
   note: '',
   hotkeyBurst: 'F9',
   hotkeySingle: 'F10',
-  autoStart: false
+  autoStart: false,
+  ramp: [45, 90, 180, 240],   // 变速启动：前几次间隔短，之后固定 intervalSec
+  freshMaxSec: 20,            // 最新帧超过这个年龄就不发（宁可晚，不能早）
+  precomposeMs: 2000          // 预生成拼图的节奏
 };
 
 function loadConfig() {
@@ -68,7 +71,9 @@ const state = {
   lastError: null,
   motion: 0,
   frames: 0,
-  gameMode: null
+  gameMode: null,
+  sheet: null,       // { at, dataUrl, count }
+  rampIndex: 0       // 自动观察已经走到第几档
 };
 
 function pushFrame(item) {
@@ -120,11 +125,37 @@ async function sampleTick() {
     state.frames += 1;
     if (state.frames <= 3) log(`采样 #${state.frames} ${img.getSize().width}x${img.getSize().height} motion=${m.toFixed(1)}`);
     win?.webContents.send('motion', { motion: m, buffered: ring.length });
+    precompose();
   } catch (e) {
     state.lastError = e.message;
     if (state.frames < 3 || Math.random() < 0.02) log('采样失败: ' + e.message);
   } finally {
     grabBusy = false;
+  }
+}
+
+let precomposeBusy = false;
+let lastPrecomposeAt = 0;
+
+/** 预热：把「最近 burst 帧」提前拼好，热键按下时 0 延迟。 */
+async function precompose(force = false) {
+  if (precomposeBusy) return;
+  const now = Date.now();
+  if (!force && now - lastPrecomposeAt < config.precomposeMs) return;
+  if (ring.length < Math.min(2, config.burst)) return;
+  precomposeBusy = true;
+  lastPrecomposeAt = now;
+  try {
+    const frames = ring.slice(-Math.max(1, Math.min(9, config.burst)));
+    const dataUrl = await composeFrames(frames);
+    if (dataUrl) {
+      state.sheet = { at: Date.now(), dataUrl, count: frames.length };
+      win?.webContents.send('sheet', { at: state.sheet.at, count: frames.length, dataUrl });
+    }
+  } catch (e) {
+    log('预生成拼图失败: ' + e.message);
+  } finally {
+    precomposeBusy = false;
   }
 }
 
@@ -160,12 +191,32 @@ async function sendFrames(mode = 'manual') {
   if (ring.length < 2) { state.lastError = '缓冲还没攒够'; pushState(); return { ok: false, error: 'buffer empty' }; }
 
   const take = Math.max(1, Math.min(9, config.burst));
-  const frames = ring.slice(-take);
-  let dataUrl;
-  try {
-    dataUrl = await composeFrames(frames);
-  } catch (e) {
-    state.lastError = '拼图失败: ' + e.message; pushState(); return { ok: false, error: state.lastError };
+
+  // 帧年龄闸：宁可晚，不能早
+  const newest = ring[ring.length - 1];
+  const ageSec = (Date.now() - newest.at) / 1000;
+  if (ageSec > (config.freshMaxSec || 20)) {
+    state.lastError = `画面过期 ${ageSec.toFixed(0)}s，跳过`;
+    log(state.lastError);
+    pushState();
+    return { ok: false, error: 'stale-frames', ageSec };
+  }
+
+  let dataUrl = null;
+  let frames = take;
+  let hitCache = false;
+  const sheetFresh = state.sheet && Date.now() - state.sheet.at < (config.precomposeMs + 2500);
+  if (sheetFresh && state.sheet.count === take) {
+    dataUrl = state.sheet.dataUrl;      // 命中预生成，0 延迟
+    hitCache = true;
+  } else {
+    const picked = ring.slice(-take);
+    frames = picked.length;
+    try {
+      dataUrl = await composeFrames(picked);
+    } catch (e) {
+      state.lastError = '拼图失败: ' + e.message; pushState(); return { ok: false, error: state.lastError };
+    }
   }
   if (!dataUrl) return { ok: false, error: '窗口不可用' };
 
@@ -188,13 +239,13 @@ async function sendFrames(mode = 'manual') {
     const latency = Date.now() - started;
     const ok = res.ok && body.ok;
     state.lastSend = {
-      at: Date.now(), ok, status: res.status, latency,
+      at: Date.now(), ok, status: res.status, latency, cached: hitCache,
       kb: Math.round(Buffer.byteLength(base64, 'base64') / 1024),
-      frames: frames.length,
+      frames,
       error: ok ? null : (body.error || text.slice(0, 120))
     };
     state.lastError = ok ? null : state.lastSend.error;
-    log(ok ? `已发送 ${frames.length} 帧 / ${state.lastSend.kb}KB / ${latency}ms` : `被拒：${state.lastSend.error}`);
+    log(ok ? `已发送 ${frames} 帧 / ${state.lastSend.kb}KB / ${latency}ms${state.lastSend.cached ? '（命中预生成）' : '（实时拼图）'}` : `被拒：${state.lastSend.error}`);
     pushState();
     return { ok, ...state.lastSend };
   } catch (e) {
@@ -207,18 +258,40 @@ async function sendFrames(mode = 'manual') {
 }
 
 // ---------- 自动观察 ----------
+function nextAutoDelay() {
+  const ramp = Array.isArray(config.ramp) ? config.ramp : [];
+  if (state.rampIndex < ramp.length) {
+    const d = Math.max(15, Number(ramp[state.rampIndex]) || 60);
+    state.rampIndex += 1;
+    return d;
+  }
+  return Math.max(30, config.intervalSec);
+}
+
 function startAuto() {
   if (state.auto) return;
   state.auto = true;
-  const tick = () => sendFrames('auto').catch(() => {});
-  state.autoTimer = setInterval(tick, Math.max(30, config.intervalSec) * 1000);
-  log(`自动观察已开（每 ${config.intervalSec} 秒）`);
+  state.rampIndex = 0;
+  const loop = async () => {
+    if (!state.auto) return;
+    const delay = nextAutoDelay();
+    state.nextAutoAt = Date.now() + delay * 1000;
+    win?.webContents.send('auto-tick', { delay, rampIndex: state.rampIndex });
+    log(`下一次自动观察：${delay} 秒后`);
+    await sendFrames('auto').catch(() => {});
+    if (!state.auto) return;
+    state.autoTimer = setTimeout(loop, delay * 1000);
+  };
+  state.autoTimer = setTimeout(loop, 0);
+  log('自动观察已开（变速启动：' + (config.ramp || []).join('/') + ' 秒，之后 ' + config.intervalSec + ' 秒）');
   pushState();
 }
 function stopAuto() {
   state.auto = false;
+  clearTimeout(state.autoTimer);
   clearInterval(state.autoTimer);
   state.autoTimer = null;
+  state.rampIndex = 0;
   log('自动观察已关');
   pushState();
 }
@@ -253,7 +326,10 @@ function pushState() {
       config, state: {
         capturing: state.capturing, auto: state.auto, frames: state.frames,
         motion: state.motion, buffered: ring.length,
-        lastSend: state.lastSend, lastError: state.lastError, gameMode: state.gameMode
+        lastSend: state.lastSend, lastError: state.lastError, gameMode: state.gameMode,
+        sheetAgeSec: state.sheet ? (Date.now() - state.sheet.at) / 1000 : null,
+        newestAgeSec: ring.length ? (Date.now() - ring[ring.length - 1].at) / 1000 : null,
+        nextAutoAt: state.nextAutoAt || null
       }
     });
     updateTray();
@@ -317,6 +393,7 @@ function createWindow() {
 // ---------- IPC ----------
 ipcMain.handle('get-bootstrap', () => ({
   config,
+  sheet: state.sheet,
   state: {
     capturing: state.capturing, auto: state.auto, frames: state.frames,
     motion: state.motion, buffered: ring.length,
